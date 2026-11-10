@@ -19,7 +19,19 @@ jobs:
       - name: Smoke test
         run: |
           docker run -d --name app -p 8000:8000 llm-service:ci
-          curl -f --retry 15 --retry-delay 1 --retry-connrefused http://localhost:8000/health
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8000/health; then
+              echo
+              echo "app is up after $i attempt(s)"
+              break
+            fi
+            echo "waiting for app ($i/30)"
+            sleep 1
+            if [ "$i" = "30" ]; then
+              echo "app did not become healthy"
+              exit 1
+            fi
+          done
           curl -f -X POST http://localhost:8000/ask \
             -H "Content-Type: application/json" \
             -d '{"question": "ping"}'
