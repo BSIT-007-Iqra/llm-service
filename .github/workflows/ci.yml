@@ -1,0 +1,37 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t llm-service:ci .
+
+      - name: Smoke test
+        run: |
+          docker run -d --name app -p 8000:8000 llm-service:ci
+          curl -f --retry 15 --retry-delay 1 --retry-connrefused http://localhost:8000/health
+          curl -f -X POST http://localhost:8000/ask \
+            -H "Content-Type: application/json" \
+            -d '{"question": "ping"}'
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs app
+
+      - name: Scan image with Trivy
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+            llm-service:ci
